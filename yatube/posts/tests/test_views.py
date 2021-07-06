@@ -145,10 +145,11 @@ class PostViewsTest(TestCase):
 
     def test_profile_page_shows_correct_context(self):
         """ На страницу profile передается правильный контекст."""
-        response = self.authorized_client.get(
-            reverse('profile',
-                    kwargs={'username': f'{PostViewsTest.user.username}'}))
-        response = response.context['page'][0]
+        response = (self.authorized_client.
+                    get(reverse('profile',
+                        kwargs={'username':
+                                f'{PostViewsTest.user.username}'})).
+                    context['page'][0])
         expected_and_response_context = (
             self.make_expected_and_response_context(response))
         for expected, value in expected_and_response_context.items():
@@ -157,11 +158,11 @@ class PostViewsTest(TestCase):
 
     def test_post_page_shows_correct_context(self):
         """ На страницу post передается правильный контекст."""
-        response = self.authorized_client.get(
-            reverse('post', kwargs={
-                'username': f'{PostViewsTest.user.username}',
-                'post_id': f'{PostViewsTest.post.id}'}))
-        response = response.context['post']
+        response = (self.authorized_client.
+                    get(reverse('profile',
+                        kwargs={'username':
+                                f'{PostViewsTest.user.username}'})).
+                    context['post'])
         expected_and_response_context = (
             self.make_expected_and_response_context(response))
         for expected, value in expected_and_response_context.items():
@@ -213,33 +214,73 @@ class PostViewsTest(TestCase):
                     kwargs={'slug': f'{PostViewsTest.group.slug}'}))
         self.assertEqual(len(response.context['page'].object_list), 10)
 
-    def test_cache_index_page_is_not_empty(self):
-        """Кэшируется главная страница. """
+    def test_cache_index_page(self):
+        """Кэшируется главная страница.
+        Создали новый пост, он не отразился на главной странице,
+        после отчистки кэша он отобразился на главной"""
         cache.clear()
-        response = self.authorized_client.get(reverse('index'))
-        response = response.context['page'][0]
+        response = (self.authorized_client_2.get(reverse('index')).
+                    context['page'][0])
+        not_cached_post = {
+            'text': 'cache text',
+            'author': PostViewsTest.user_2,
+            'group': PostViewsTest.group_2
+        }
         Post.objects.create(
-            text='cache text',
-            author=PostViewsTest.user
+            text=not_cached_post['text'],
+            author=not_cached_post['author'],
+            group=not_cached_post['group']
         )
-        self.assertNotEqual(response.text, 'cache text')
+        self.assertNotEqual(response.text, not_cached_post['text'])
+        self.assertNotEqual(response.author, not_cached_post['author'])
+        self.assertNotEqual(response.group, not_cached_post['group'])
         cache.clear()
-        response = self.authorized_client.get(reverse('index'))
-        response = response.context['page'][0]
-        self.assertEqual(response.text, 'cache text')
+        response = (self.authorized_client.get(reverse('index')).
+                    context['page'][0])
+        self.assertEqual(response.text, not_cached_post['text'])
+        self.assertEqual(response.author, not_cached_post['author'])
+        self.assertEqual(response.group, not_cached_post['group'])
 
     def test_follower_see_posts(self):
         """Подписчик видит посты автора, на коротого подписался."""
-        response = self.authorized_client_2.get(reverse('follow_index'))
-        response = response.context['page'][0]
+        response = (self.authorized_client_2.get(reverse('follow_index')).
+                    context['page'][0])
         expected_and_response_context = (
             self.make_expected_and_response_context(response))
         for expected, value in expected_and_response_context.items():
             with self.subTest(value=value):
                 self.assertEqual(value, expected)
 
+    def test_following_is_working(self):
+        """Работает подписка на автора."""
+        count_follow_note = Follow.objects.count()
+        response = self.authorized_client_3.get(
+            reverse('profile_follow',
+                    kwargs={'username': PostViewsTest.user.username}))
+        self.assertEqual(Follow.objects.count(), count_follow_note + 1)
+        response = (self.authorized_client_3.get(reverse('follow_index')).
+                    context['page'])
+        posts_count = len(response)
+        self.assertEqual(posts_count, 10)
+
+    def test_unfollowing_is_working(self):
+        """Работает отписка от автора."""
+        response = self.authorized_client_3.get(
+            reverse('profile_follow',
+                    kwargs={'username': PostViewsTest.user.username}))
+        count_follow_note = Follow.objects.count()
+        response = self.authorized_client_3.get(
+            reverse('profile_unfollow',
+                    kwargs={'username': PostViewsTest.user.username}))
+        self.assertEqual(Follow.objects.count(), count_follow_note - 1)
+        response = (self.authorized_client_3.get(reverse('follow_index')).
+                    context['page'])
+        posts_count = len(response)
+        self.assertEqual(posts_count, 0)
+
     def test_not_follower_not_see_posts(self):
         """Не подписчик не видит посты автора, на корторого не подписался."""
-        response = self.authorized_client_3.get(reverse('follow_index'))
-        posts_count = len(response.context['page'])
+        response = (self.authorized_client_3.get(reverse('follow_index')).
+                    context['page'])
+        posts_count = len(response)
         self.assertEqual(posts_count, 0)

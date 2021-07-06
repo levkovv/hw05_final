@@ -84,7 +84,7 @@ class PostCreateFormTest(TestCase):
         self.assertEqual(response.image, 'posts/small.gif')
 
     def test_edit_post(self):
-        """ При редактировании е создается еще одна запись в БД и работает редирект.
+        """ При редактировании не создается еще одна запись в БД и работает редирект.
         И проверяется что пост изменился
         """
         post_count = Post.objects.count()

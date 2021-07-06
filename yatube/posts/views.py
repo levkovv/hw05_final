@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.cache import cache_page
 
 from .forms import CommentForm, PostForm
 from .models import Follow, Group, Post, User
@@ -10,7 +9,6 @@ from .models import Follow, Group, Post, User
 User = get_user_model()
 
 
-@cache_page(1 * 20, key_prefix='index_page')
 def index(request):
     """View-функция главной страницы.
     Выводит по 10 записей из всей базы
@@ -45,14 +43,13 @@ def profile(request, username):
     paginator = Paginator(posts_list, 10)
     page_number = request.GET.get('page')
     page = paginator.get_page(page_number)
-    following = False
-    author_followers = author.following.all()
-    for follower in author_followers:
-        if request.user == follower.user:
-            following = True
-            break
     context = {'author': author, 'page': page, 'count': count_posts,
-               'following': following}
+               'following': True}
+    if not request.user.is_authenticated:
+        return render(request, 'profile.html', context)
+    author_followers = author.following.filter(user=request.user)
+    if not author_followers.exists():
+        context['following'] = False
     return render(request, 'profile.html', context)
 
 
@@ -74,13 +71,9 @@ def post_view(request, username, post_id):
 def add_comment(request, username, post_id):
     author = get_object_or_404(User, username=username)
     post = get_object_or_404(author.posts.all(), pk=post_id)
-    comments = post.comments.all()
     form = CommentForm(request.POST or None)
-    count = author.posts.count()
-    context = {'post': post, 'author': author, 'count': count, 'form': form,
-               'comments': comments}
     if not form.is_valid():
-        return render(request, 'post.html', context)
+        return redirect('post', username, post_id)
     new_comment = form.save(commit=False)
     new_comment.author = request.user
     new_comment.post = post
@@ -138,9 +131,7 @@ def profile_follow(request, username):
     author = get_object_or_404(User, username=username)
     if request.user == author:
         return redirect('profile', username)
-    if Follow.objects.filter(user=request.user, author=author):
-        return redirect('profile', username)
-    Follow.objects.create(
+    Follow.objects.get_or_create(
         user=request.user,
         author=author
     )
@@ -151,8 +142,7 @@ def profile_follow(request, username):
 def profile_unfollow(request, username):
     """Функция отписки юзера от автора username."""
     author = get_object_or_404(User, username=username)
-    author_followers = author.following.all()
-    author_followers.filter(user=request.user).delete()
+    author.following.all().filter(user=request.user).delete()
     return redirect('profile', username)
 
 
