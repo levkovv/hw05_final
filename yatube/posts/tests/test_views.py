@@ -49,7 +49,8 @@ class PostViewsTest(TestCase):
             content=small_gif,
             content_type='image/gif'
         )
-        for _ in range(0, 13):
+        PostViewsTest.count_posts = 13
+        for _ in range(0, PostViewsTest.count_posts):
             PostViewsTest.post = Post.objects.create(
                 text='test text',
                 author=PostViewsTest.user,
@@ -123,48 +124,51 @@ class PostViewsTest(TestCase):
     def test_home_page_shows_correct_context(self):
         """На страницу index передается правильный контекст.  """
         cache.clear()
-        response = self.authorized_client.get(
+        first_post = self.authorized_client.get(
             reverse('index')).context['page'][0]
         expected_and_response_context = (
-            self.make_expected_and_response_context(response))
+            self.make_expected_and_response_context(first_post))
         for expected, value in expected_and_response_context.items():
             with self.subTest(value=value):
                 self.assertEqual(value, expected)
 
     def test_group_page_shows_correct_context(self):
         """ На страницу group передается правильный контекст. """
-        response = self.authorized_client.get(
-            reverse('group_posts',
-                    kwargs={'slug': f'{PostViewsTest.group.slug}'}))
-        response = response.context['page'][0]
+        first_post = (self.authorized_client.
+                      get(reverse(
+                          'group_posts',
+                          kwargs={'slug': f'{PostViewsTest.group.slug}'})).
+                      context['page'][0])
         expected_and_response_context = (
-            self.make_expected_and_response_context(response))
+            self.make_expected_and_response_context(first_post))
         for expected, value in expected_and_response_context.items():
             with self.subTest(value=value):
                 self.assertEqual(value, expected)
 
     def test_profile_page_shows_correct_context(self):
         """ На страницу profile передается правильный контекст."""
-        response = (self.authorized_client.
-                    get(reverse('profile',
-                        kwargs={'username':
-                                f'{PostViewsTest.user.username}'})).
-                    context['page'][0])
+        first_post = (self.authorized_client.
+                      get(reverse(
+                          'profile',
+                          kwargs={'username':
+                                  f'{PostViewsTest.user.username}'})).
+                      context['page'][0])
         expected_and_response_context = (
-            self.make_expected_and_response_context(response))
+            self.make_expected_and_response_context(first_post))
         for expected, value in expected_and_response_context.items():
             with self.subTest(value=value):
                 self.assertEqual(value, expected)
 
     def test_post_page_shows_correct_context(self):
         """ На страницу post передается правильный контекст."""
-        response = (self.authorized_client.
-                    get(reverse('profile',
-                        kwargs={'username':
-                                f'{PostViewsTest.user.username}'})).
-                    context['post'])
+        first_post = (self.authorized_client.
+                      get(reverse(
+                          'profile',
+                          kwargs={'username':
+                                  f'{PostViewsTest.user.username}'})).
+                      context['post'])
         expected_and_response_context = (
-            self.make_expected_and_response_context(response))
+            self.make_expected_and_response_context(first_post))
         for expected, value in expected_and_response_context.items():
             with self.subTest(value=value):
                 self.assertEqual(value, expected)
@@ -219,8 +223,8 @@ class PostViewsTest(TestCase):
         Создали новый пост, он не отразился на главной странице,
         после отчистки кэша он отобразился на главной"""
         cache.clear()
-        response = (self.authorized_client_2.get(reverse('index')).
-                    context['page'][0])
+        first_post = (self.authorized_client_2.get(reverse('index')).
+                      context['page'][0])
         not_cached_post = {
             'text': 'cache text',
             'author': PostViewsTest.user_2,
@@ -231,22 +235,21 @@ class PostViewsTest(TestCase):
             author=not_cached_post['author'],
             group=not_cached_post['group']
         )
-        self.assertNotEqual(response.text, not_cached_post['text'])
-        self.assertNotEqual(response.author, not_cached_post['author'])
-        self.assertNotEqual(response.group, not_cached_post['group'])
+        self.assertNotEqual(first_post.id, PostViewsTest.count_posts + 1)
         cache.clear()
-        response = (self.authorized_client.get(reverse('index')).
-                    context['page'][0])
-        self.assertEqual(response.text, not_cached_post['text'])
-        self.assertEqual(response.author, not_cached_post['author'])
-        self.assertEqual(response.group, not_cached_post['group'])
+        first_post = (self.authorized_client.get(reverse('index')).
+                      context['page'][0])
+        self.assertEqual(first_post.id, PostViewsTest.count_posts + 1)
+        self.assertEqual(first_post.text, not_cached_post['text'])
+        self.assertEqual(first_post.author, not_cached_post['author'])
+        self.assertEqual(first_post.group, not_cached_post['group'])
 
     def test_follower_see_posts(self):
         """Подписчик видит посты автора, на коротого подписался."""
-        response = (self.authorized_client_2.get(reverse('follow_index')).
-                    context['page'][0])
+        first_post = (self.authorized_client_2.get(reverse('follow_index')).
+                      context['page'][0])
         expected_and_response_context = (
-            self.make_expected_and_response_context(response))
+            self.make_expected_and_response_context(first_post))
         for expected, value in expected_and_response_context.items():
             with self.subTest(value=value):
                 self.assertEqual(value, expected)
@@ -265,15 +268,12 @@ class PostViewsTest(TestCase):
 
     def test_unfollowing_is_working(self):
         """Работает отписка от автора."""
-        response = self.authorized_client_3.get(
-            reverse('profile_follow',
-                    kwargs={'username': PostViewsTest.user.username}))
         count_follow_note = Follow.objects.count()
-        response = self.authorized_client_3.get(
+        response = self.authorized_client_2.get(
             reverse('profile_unfollow',
                     kwargs={'username': PostViewsTest.user.username}))
         self.assertEqual(Follow.objects.count(), count_follow_note - 1)
-        response = (self.authorized_client_3.get(reverse('follow_index')).
+        response = (self.authorized_client_2.get(reverse('follow_index')).
                     context['page'])
         posts_count = len(response)
         self.assertEqual(posts_count, 0)
